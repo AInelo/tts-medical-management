@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "es2016", // Cible de compilation (ES2016 est une bonne option)
+    "lib": ["dom", "es2016"], // Ajouter "dom" pour le support des APIs du navigateur (nécessaire pour React)
+    "jsx": "react", // Activer le support JSX pour React
+
+    /* Modules */
+    "module": "commonjs", // Type de module (CommonJS est souvent utilisé avec Node.js)
+    "rootDir": "./src", // Dossier racine pour les fichiers sources
+    "outDir": "./dist", // Dossier de sortie pour les fichiers compilés
+    "moduleResolution": "node", // Résolution des modules compatible avec Node.js
+    "baseUrl": ".", // Chemin de base pour les imports
+    "paths": {
+      "@/*": ["./src/*"] // Alias pour les imports (optionnel)
+    },
+    "resolveJsonModule": true, // Permettre l'importation de fichiers JSON
+
+    /* Interop Constraints */
+    "esModuleInterop": true, // Permettre l'interopérabilité entre CommonJS et ES modules
+    "forceConsistentCasingInFileNames": true, // Assurer la cohérence de la casse des noms de fichiers
+
+    /* Type Checking */
+    "strict": true, // Activer toutes les vérifications strictes de TypeScript
+    "skipLibCheck": true // Ignorer la vérification des fichiers de déclaration (librairies externes)
+  },
+  "include": ["src/**/*"], // Inclure tous les fichiers dans le dossier `src`
+  "exclude": ["src/node_modules", "dist"] // Exclure les dossiers `node_modules` et `dist`
+}

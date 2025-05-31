@@ -1,0 +1,22 @@
+server {
+    listen 80;
+    server_name collectpionner.ddns.net;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name collectpionner.ddns.net;
+
+    ssl_certificate /etc/letsencrypt/live/collectpionner.ddns.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/collectpionner.ddns.net/privkey.pem;
+
+    location /api/ {
+        proxy_pass http://localhost:5100/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}

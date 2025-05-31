@@ -1,0 +1,62 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📂 Checkout repository
+        uses: actions/checkout@v3
+
+      - name: 📁 Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_URMAPHA_PRIVATE_SSH }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy and run app on VPS
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            set -e
+
+            echo "[1/6] 📦 Cloner le projet ou mettre à jour..."
+            mkdir -p ~/urmapha && cd ~/urmapha
+            if [ ! -d ".git" ]; then
+              git clone git@github.com:${{ github.repository }} .  # Cloner depuis GitHub
+            else
+              git pull
+            fi
+
+            echo "[2/6] 🐳 Construire l’image Docker..."
+            cd api
+            docker build -t urmapha_backend .
+
+            echo "[3/6] 🧼 Nettoyage ancien conteneur..."
+            docker stop urmapha_backend || true
+            docker rm urmapha_backend || true
+
+            echo "[4/6] 🚀 Lancer le conteneur..."
+            docker run -d \
+              --name urmapha_backend \
+              -p 3000:3000 \
+              --restart unless-stopped \
+              urmapha_backend
+
+            echo "[5/6] 🔧 Configurer NGINX..."
+            sudo cp ./urmaphalab/collection.urmapha.com /etc/nginx/sites-available/collection.urmapha.com
+            sudo ln -sf /etc/nginx/sites-available/collection.urmapha.com /etc/nginx/sites-enabled/collection.urmapha.com
+            sudo nginx -t && sudo systemctl reload nginx
+
+            echo "[6/6] 🔐 Installer SSL avec Certbot..."
+            sudo apt update
+            sudo apt install -y certbot python3-certbot-nginx
+            sudo certbot --nginx --non-interactive --agree-tos --email your@email.com -d collection.urmaphalab.com
+
+            echo "✅ Déploiement terminé avec succès !"
+          EOF

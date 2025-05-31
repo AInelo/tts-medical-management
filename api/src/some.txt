@@ -1,0 +1,19 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/toli8447/collectpionner/collecte-audio-pionners/api/dist"
+PassengerBaseURI "/"
+PassengerNodejs "/opt/alt/alt-nodejs20/root/usr/bin/node"
+PassengerAppType node
+PassengerStartupFile server.js
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+
+
+# Redirection HTTP vers HTTPS
+# <IfModule mod_rewrite.c>
+#   RewriteEngine On
+#   RewriteCond %{HTTPS} off
+#   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
+
+
+# PassengerAppEnv production
+PassengerAppEnv production
