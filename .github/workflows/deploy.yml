@@ -28,7 +28,7 @@ jobs:
             echo "[1/6] 📦 Cloner le projet ou mettre à jour..."
             mkdir -p ~/urmapha && cd ~/urmapha
             if [ ! -d ".git" ]; then
-              git clone git@github.com:${{ github.repository }} .  # Cloner depuis GitHub
+              git clone git@github.com:AInelo/tts-medical-management.git .  # Cloner depuis GitHub
             else
               git pull
             fi
