@@ -164,139 +164,36 @@ jobs:
           echo "🎉 Déploiement terminé avec succès !"
           EOF
 
-      - name: 🔧 Setup Certbot and SSL Certificate
+      - name: 🔧 Configure NGINX
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-          echo "🔐 [1/4] Installation et configuration SSL..."
-          
-          # Vérifier et installer Certbot si nécessaire
-          if ! command -v certbot &> /dev/null; then
-            echo "📦 Installation de Certbot..."
-            sudo apt update
-            sudo apt install -y certbot python3-certbot-nginx
-          else
-            echo "✅ Certbot déjà installé"
-          fi
-          
-          # Vérifier si le certificat existe déjà
-          DOMAIN="collection.urmaphalab.com"
-          CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-          
-          if [ ! -f "$CERT_PATH" ]; then
-            echo "🔐 Génération du certificat SSL pour $DOMAIN..."
-            
-            # Créer une configuration NGINX temporaire HTTP uniquement
-            sudo tee /etc/nginx/sites-available/temp-http.conf > /dev/null << 'TEMP_CONF'
-              server {
-                  listen 80;
-                  server_name collection.urmaphalab.com;
-                  
-                  # Location pour les challenges Let's Encrypt
-                  location /.well-known/acme-challenge/ {
-                      root /var/www/html;
-                  }
-                  
-                  # Redirection temporaire vers l'API en HTTP
-                  location / {
-                      proxy_pass http://localhost:5100;
-                      proxy_set_header Host $host;
-                      proxy_set_header X-Real-IP $remote_addr;
-                      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                      proxy_set_header X-Forwarded-Proto $scheme;
-                  }
-              }
-              TEMP_CONF
-                          
-            # Activer la config temporaire
-            sudo ln -sf /etc/nginx/sites-available/temp-http.conf /etc/nginx/sites-enabled/temp-http.conf
-            sudo rm -f /etc/nginx/sites-enabled/default
-            sudo rm -f /etc/nginx/sites-enabled/tts-medical.conf
-            
-            # Tester et recharger NGINX
-            if sudo nginx -t; then
-              sudo systemctl reload nginx
-            else
-              echo "❌ Erreur dans la configuration NGINX temporaire"
-              exit 1
-            fi
-            
-            # Créer le répertoire pour les challenges
-            sudo mkdir -p /var/www/html/.well-known/acme-challenge
-            sudo chown -R www-data:www-data /var/www/html
-            
-            # Générer le certificat
-            echo "🔐 Génération du certificat SSL..."
-            sudo certbot certonly \
-              --webroot \
-              --webroot-path=/var/www/html \
-              --email admin@urmaphalab.com \
-              --agree-tos \
-              --no-eff-email \
-              --domains $DOMAIN \
-              --non-interactive
-            
-            if [ $? -eq 0 ]; then
-              echo "✅ Certificat SSL généré avec succès"
-            else
-              echo "❌ Échec de la génération du certificat SSL"
-              echo "⚠️  Continuité avec HTTP uniquement"
-            fi
-          else
-            echo "✅ Certificat SSL existe déjà pour $DOMAIN"
-            
-            # Vérifier la validité du certificat (expire dans moins de 30 jours)
-            if sudo certbot certificates | grep -A 5 "$DOMAIN" | grep -q "VALID: [0-2][0-9] days"; then
-              echo "🔄 Renouvellement du certificat..."
-              sudo certbot renew --quiet
-            fi
-          fi
-          EOF
-
-      - name: 🔧 Configure NGINX with SSL
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'NGINX_EOF'
           PROJECT_DIR=~/tts-medical-management
-          DOMAIN="collection.urmaphalab.com"
-          CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
           
-          echo "🔧 [2/4] Configuration NGINX avec SSL..."
+          echo "🔧 [1/5] Recherche de la configuration NGINX..."
           
           # Vérifier plusieurs emplacements possibles pour la config NGINX
           NGINX_CONFIG=""
           if [ -f "$PROJECT_DIR/nginx/tts-medical.conf" ]; then
             NGINX_CONFIG="$PROJECT_DIR/nginx/tts-medical.conf"
+            echo "✅ Config trouvée dans nginx/tts-medical.conf"
           elif [ -f "$PROJECT_DIR/api/nginx.conf" ]; then
             NGINX_CONFIG="$PROJECT_DIR/api/nginx.conf"
+            echo "✅ Config trouvée dans api/nginx.conf"
           elif [ -f "$PROJECT_DIR/tts-medical.conf" ]; then
             NGINX_CONFIG="$PROJECT_DIR/tts-medical.conf"
+            echo "✅ Config trouvée dans tts-medical.conf"
           fi
           
           if [ -n "$NGINX_CONFIG" ]; then
-            echo "🔧 Configuration NGINX trouvée: $NGINX_CONFIG"
+            echo "🔧 [2/5] Configuration NGINX trouvée: $NGINX_CONFIG"
             
-            # Créer le répertoire nginx s'il n'existe pas
+            # Créer les répertoires nginx s'ils n'existent pas
             sudo mkdir -p /etc/nginx/sites-available
             sudo mkdir -p /etc/nginx/sites-enabled
             
-            if [ -f "$CERT_PATH" ]; then
-              echo "✅ Certificat SSL disponible - Configuration HTTPS complète"
-              
-              # Copier la configuration complète avec SSL
-              sudo cp "$NGINX_CONFIG" /etc/nginx/sites-available/tts-medical.conf
-              
-              # Supprimer la config temporaire
-              sudo rm -f /etc/nginx/sites-enabled/temp-http.conf
-            else
-              echo "⚠️  Certificat SSL non disponible - Configuration HTTP uniquement"
-              
-              # Créer une version HTTP de la configuration
-              sed '/listen 443/,/ssl_dhparam/d' "$NGINX_CONFIG" | \
-              sed '/ssl_certificate/d' | \
-              sed '/include.*ssl/d' | \
-              sed 's/listen 80;/listen 80;\n    # SSL sera configuré lors du prochain déploiement/' | \
-              sed '/return 301 https/d' | \
-              sudo tee /etc/nginx/sites-available/tts-medical.conf > /dev/null
-            fi
+            echo "🔧 [3/5] Copie de la configuration..."
+            # Copier la configuration
+            sudo cp "$NGINX_CONFIG" /etc/nginx/sites-available/tts-medical.conf
             
             # Créer le lien symbolique
             sudo ln -sf /etc/nginx/sites-available/tts-medical.conf /etc/nginx/sites-enabled/tts-medical.conf
@@ -304,8 +201,8 @@ jobs:
             # Supprimer la config par défaut si elle existe
             sudo rm -f /etc/nginx/sites-enabled/default
             
+            echo "🧪 [4/5] Test de la configuration NGINX..."
             # Test de la configuration NGINX
-            echo "🧪 Test de la configuration NGINX..."
             if sudo nginx -t; then
               echo "✅ Configuration NGINX valide"
               sudo systemctl reload nginx
@@ -313,81 +210,66 @@ jobs:
               
               # Vérifier le status de NGINX
               if sudo systemctl is-active nginx > /dev/null; then
-                echo "✅ NGINX est actif et fonctionne"
-                
-                # Test de connectivité
-                if [ -f "$CERT_PATH" ]; then
-                  echo "🌐 Test HTTPS..."
-                  if curl -f -s --max-time 10 https://$DOMAIN/ > /dev/null 2>&1; then
-                    echo "✅ HTTPS accessible"
-                  else
-                    echo "⚠️  HTTPS non accessible - vérification manuelle nécessaire"
-                  fi
-                fi
-                
-                echo "🌐 Test HTTP..."
-                if curl -f -s --max-time 10 http://$DOMAIN/ > /dev/null 2>&1; then
-                  echo "✅ HTTP accessible"
-                else
-                  echo "⚠️  HTTP non accessible - vérification manuelle nécessaire"
-                fi
+                echo "✅ [5/5] NGINX est actif et fonctionne"
               else
                 echo "❌ Problème avec NGINX"
-                sudo systemctl status nginx
+                sudo systemctl status nginx --no-pager -l
               fi
             else
               echo "❌ Erreur dans la configuration NGINX"
-              sudo nginx -t 2>&1
+              sudo nginx -t
               echo "⚠️  Continuité du déploiement sans rechargement NGINX"
             fi
           else
-            echo "⚠️  Aucun fichier de configuration NGINX trouvé"
+            echo "⚠️  [2/5] Aucun fichier de configuration NGINX trouvé"
             echo "📂 Contenu du répertoire projet:"
-            ls -la $PROJECT_DIR/
+            ls -la $PROJECT_DIR/ 2>/dev/null || echo "Répertoire projet non trouvé"
             if [ -d "$PROJECT_DIR/nginx" ]; then
               echo "📂 Contenu du répertoire nginx:"
               ls -la $PROJECT_DIR/nginx/
             fi
+            echo "⚠️  Veuillez créer le fichier nginx/tts-medical.conf dans votre repository"
           fi
-          EOF
-
-      - name: 🔄 Setup SSL Auto-Renewal
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-          echo "🔄 [3/4] Configuration du renouvellement automatique SSL..."
-          
-          # Vérifier si le cron job existe déjà
-          if ! sudo crontab -l 2>/dev/null | grep -q "certbot renew"; then
-            echo "📅 Ajout du cron job pour le renouvellement automatique..."
-            
-            # Ajouter le renouvellement automatique (tous les jours à 3h du matin)
-            (sudo crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'") | sudo crontab -
-            
-            echo "✅ Renouvellement automatique configuré"
-          else
-            echo "✅ Renouvellement automatique déjà configuré"
-          fi
-          
-          # Test du renouvellement
-          echo "🧪 Test de renouvellement (dry-run)..."
-          if sudo certbot renew --dry-run --quiet; then
-            echo "✅ Test de renouvellement réussi"
-          else
-            echo "⚠️  Problème potentiel avec le renouvellement - vérification manuelle recommandée"
-          fi
-          EOF
+          NGINX_EOF
 
       - name: 🧹 Cleanup old images
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'CLEANUP_EOF'
           echo "🧹 Nettoyage des anciennes images..."
           # Garder seulement les 3 dernières images
-          docker images ${{ env.IMAGE_NAME }} --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}$' | sort -r | tail -n +4 | xargs -r -I {} docker rmi ${{ env.IMAGE_NAME }}:{} || true
+          docker images ${{ env.IMAGE_NAME }} --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}
+
+      - name: 📊 Deployment Summary
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'SUMMARY_EOF'
+          echo "📊 RÉSUMÉ DU DÉPLOIEMENT"
+          echo "======================="
+          echo "🐳 Conteneur: $(docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep ${{ env.CONTAINER_NAME }})"
+          echo "💾 Utilisation mémoire: $(docker stats --no-stream --format '{{.MemUsage}}' ${{ env.CONTAINER_NAME }})"
+          echo "📈 CPU: $(docker stats --no-stream --format '{{.CPUPerc}}' ${{ env.CONTAINER_NAME }})"
+          echo "🏷️  Image: $(docker images ${{ env.IMAGE_NAME }}:latest --format '{{.Size}}')"
+          echo "⏰ Temps de démarrage: $(docker inspect ${{ env.CONTAINER_NAME }} --format='{{.State.StartedAt}}')"
+          echo ""
+          echo "🌐 URLs à tester:"
+          echo "   - API: http://collection.urmaphalab.com/api/"
+          echo "   - HTTPS: https://collection.urmaphalab.com/api/"
+          SUMMARY_EOF
+
+      - name: 🔔 Notify deployment status
+        if: always()
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "✅ Déploiement réussi sur ${{ secrets.VPS_HOST }}"
+            echo "🚀 Application accessible sur le port ${{ env.PORT }}"
+          else
+            echo "❌ Échec du déploiement"
+            exit 1
+          fi | sort -r | tail -n +4 | xargs -r -I {} docker rmi ${{ env.IMAGE_NAME }}:{} || true
           
           # Nettoyage général mais conservateur
           docker system prune -f
           echo "✅ Nettoyage terminé"
-          EOF
+          CLEANUP_EOF
 
       - name: 📊 Deployment Summary
         run: |
@@ -401,16 +283,8 @@ jobs:
           echo "⏰ Temps de démarrage: $(docker inspect ${{ env.CONTAINER_NAME }} --format='{{.State.StartedAt}}')"
           echo ""
           echo "🌐 URLs à tester:"
-          echo "   - HTTP: http://collection.urmaphalab.com/api/"
+          echo "   - API: http://collection.urmaphalab.com/api/"
           echo "   - HTTPS: https://collection.urmaphalab.com/api/"
-          echo ""
-          echo "🔐 Certificat SSL:"
-          if [ -f "/etc/letsencrypt/live/collection.urmaphalab.com/fullchain.pem" ]; then
-            echo "   ✅ Certificat SSL configuré"
-            echo "   📅 Expiration: $(sudo openssl x509 -enddate -noout -in /etc/letsencrypt/live/collection.urmaphalab.com/fullchain.pem | cut -d= -f2)"
-          else
-            echo "   ⚠️  Certificat SSL non configuré (HTTP uniquement)"
-          fi
           EOF
 
       - name: 🔔 Notify deployment status
@@ -423,8 +297,6 @@ jobs:
             echo "❌ Échec du déploiement"
             exit 1
           fi
-
-
 
 
 
