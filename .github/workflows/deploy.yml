@@ -13,26 +13,17 @@ jobs:
       - name: 📂 Checkout repository
         uses: actions/checkout@v3
 
-      - name: 🔐 Setup SSH to VPS
+      - name: 🔐 Write SSH private key
         run: |
-          mkdir -p ~/.ssh
-          # Sauvegarder directement la clé privée (pas de base64)
-          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          # Permissions strictes pour la clé privée
-          chmod 600 ~/.ssh/id_rsa
-          # Vérifier que la clé est valide
-          ssh-keygen -l -f ~/.ssh/id_rsa
-          # Ajouter l'hôte aux known_hosts
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-      - name: 🧪 Test SSH Connection
-        run: |
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > key.pem
+          chmod 600 key.pem
 
       - name: 🚀 Deploy and run app on VPS
         run: |
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -i key.pem \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
             echo "[1/6] 📦 Cloner le projet ou mettre à jour..."
             mkdir -p ~/collection_audios && cd ~/collection_audios
