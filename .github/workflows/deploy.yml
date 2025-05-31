@@ -15,25 +15,19 @@ jobs:
 
       - name: 🔐 Write SSH private key
         run: |
-          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > key.pem
+          echo "${{ secrets.VPS_URMAPHA_PRIVATE_SSH }}" > key.pem
           chmod 600 key.pem
-          # Vérifier le format de la clé
-          echo "Format de la clé:"
-          head -1 key.pem
-          # Vérifier que la clé est valide
-          ssh-keygen -l -f key.pem || echo "Erreur de format de clé détectée"
-
+      
       - name: 🚀 Deploy and run app on VPS
         run: |
           ssh -i key.pem \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
             set -e
             echo "[1/6] 📦 Cloner le projet ou mettre à jour..."
             mkdir -p ~/collection_audios && cd ~/collection_audios
             if [ ! -d ".git" ]; then
-              # Utilisez HTTPS au lieu de SSH pour le clone initial
               git clone https://github.com/AInelo/tts-medical-management.git .
             else
               git pull
