@@ -17,6 +17,11 @@ jobs:
         run: |
           echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > key.pem
           chmod 600 key.pem
+          # Vérifier le format de la clé
+          echo "Format de la clé:"
+          head -1 key.pem
+          # Vérifier que la clé est valide
+          ssh-keygen -l -f key.pem || echo "Erreur de format de clé détectée"
 
       - name: 🚀 Deploy and run app on VPS
         run: |
