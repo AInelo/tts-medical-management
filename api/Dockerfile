@@ -1,45 +1,57 @@
-# Dockerfile
+# Multi-stage build pour optimiser la taille
 FROM node:22-alpine AS base
 
+# Installer les dépendances système nécessaires
+RUN apk add --no-cache dumb-init
+
+# Créer le répertoire de travail
 WORKDIR /app
+
+# Copier les fichiers de dépendances
 COPY package*.json ./
 
-# Stage développement
+# Stage de développement
 FROM base AS development
-RUN npm install
+RUN npm ci --include=dev
 COPY . .
-EXPOSE 3000
+EXPOSE 5100
 CMD ["npm", "run", "dev"]
 
-# Stage build
+# Stage de build
 FROM base AS build
-RUN npm install
+RUN npm ci --include=dev
 COPY . .
 RUN npm run build
+# Le script postbuild (addJsExtension.js) sera exécuté automatiquement après tsc
 
-# Stage production
-FROM node:22-alpine AS production
+# Stage de production
+FROM base AS production
 
-# Créer utilisateur non-root
+# Copier seulement les dépendances de production
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Copier le code source, les fichiers compilés et le script addJsExtension depuis le stage build
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/addJsExtension.js ./
+
+# Créer un utilisateur non-root pour la sécurité
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-WORKDIR /app
+# Changer la propriété des fichiers
+RUN chown -R nodejs:nodejs /app
+USER nodejs
 
-# Installer dépendances production
-COPY package*.json ./
-RUN npm ci --only=production --silent && \
-    npm cache clean --force
-
-# Copier le code compilé
-COPY --from=build --chown=nodejs:nodejs /app/dist ./dist
+# Exposer le port
+EXPOSE 5100
 
 # Variables d'environnement
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=5100
 
-# Utiliser l'utilisateur non-root
-USER nodejs
+# Utiliser dumb-init pour gérer les signaux
+ENTRYPOINT ["dumb-init", "--"]
 
-EXPOSE 3000
+# Commande par défaut
 CMD ["node", "dist/index.js"]
