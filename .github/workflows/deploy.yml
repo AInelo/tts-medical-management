@@ -79,6 +79,7 @@ jobs:
           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
           "cd ~/tts-medical-management 2>/dev/null || git clone https://github.com/AInelo/tts-medical-management.git ~/tts-medical-management; \
            cd ~/tts-medical-management && git pull origin main"
+           chmod +x scripts/*.sh
 
       - name: 🔧 Make deploy script executable
         run: |
