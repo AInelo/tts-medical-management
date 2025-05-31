@@ -15,13 +15,16 @@ jobs:
 
       - name: 🔐 Write SSH private key
         run: |
-          echo "${{ secrets.VPS_URMAPHA_PRIVATE_SSH }}" > key.pem
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
           chmod 600 key.pem
       
-      - name: 🚀 Deploy and run app on VPS
+      - name: 🧪 Test SSH Connection
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'"
+
+      - name: 📦 Clone or update project
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-          set -e
           echo "[1/6] 📦 Cloner le projet ou mettre à jour..."
           mkdir -p ~/collection_audios && cd ~/collection_audios
           if [ ! -d ".git" ]; then
@@ -29,31 +32,50 @@ jobs:
           else
             git pull
           fi
+          EOF
 
+      - name: 🐳 Build Docker image
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           echo "[2/6] 🐳 Construire l'image Docker..."
-          cd api
+          cd ~/collection_audios/api
           docker build -t collection_audios_backend .
+          EOF
 
+      - name: 🧼 Clean old container
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           echo "[3/6] 🧼 Nettoyage ancien conteneur..."
           docker stop collection_audios_backend || true
           docker rm collection_audios_backend || true
+          EOF
 
+      - name: 🚀 Run new container
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           echo "[4/6] 🚀 Lancer le conteneur..."
           docker run -d \
             --name collection_audios_backend \
             -p 3000:3000 \
             --restart unless-stopped \
             collection_audios_backend
+          EOF
 
+      - name: 🔧 Configure NGINX
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           echo "[5/6] 🔧 Configurer NGINX..."
-          sudo cp ./urmaphalab/collection.urmapha.com /etc/nginx/sites-available/collection.urmapha.com
+          sudo cp ~/collection_audios/urmaphalab/collection.urmapha.com /etc/nginx/sites-available/collection.urmapha.com
           sudo ln -sf /etc/nginx/sites-available/collection.urmapha.com /etc/nginx/sites-enabled/collection.urmapha.com
           sudo nginx -t && sudo systemctl reload nginx
+          EOF
 
+      - name: 🔐 Setup SSL with Certbot
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           echo "[6/6] 🔐 Installer SSL avec Certbot..."
           sudo apt update
           sudo apt install -y certbot python3-certbot-nginx
           sudo certbot --nginx --non-interactive --agree-tos --email your@email.com -d collection.urmaphalab.com
-
           echo "✅ Déploiement terminé avec succès !"
           EOF
