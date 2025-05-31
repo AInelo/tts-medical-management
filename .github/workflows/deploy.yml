@@ -16,8 +16,8 @@ jobs:
       - name: 🔐 Setup SSH to VPS
         run: |
           mkdir -p ~/.ssh
-          # Décoder la clé privée et la sauvegarder
-          echo "${{ secrets.VPS_SSH_PRIVATE_KEY_BASE64 }}" | base64 -d > ~/.ssh/id_rsa
+          # Sauvegarder directement la clé privée (pas de base64)
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           # Permissions strictes pour la clé privée
           chmod 600 ~/.ssh/id_rsa
           # Vérifier que la clé est valide
