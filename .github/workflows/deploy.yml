@@ -6,7 +6,8 @@ on:
     paths:
       - 'api/**'
       - '.github/workflows/**'
-      - 'nginx/**'  # Ajouté pour surveiller les changements de config NGINX
+      - 'nginx/**'
+      - 'scripts/**'
   pull_request:
     branches: [main]
     paths:
@@ -15,10 +16,9 @@ on:
 env:
   IMAGE_NAME: tts-medical-api
   CONTAINER_NAME: tts-medical-backend
-  PORT: 5100  # CORRIGÉ: Port correct selon votre app Node.js
+  PORT: 5100
 
 jobs:
-  # Job de test avant déploiement
   test:
     name: 🧪 Run Tests
     runs-on: ubuntu-latest
@@ -55,7 +55,6 @@ jobs:
           sleep 5
           docker stop test-container || true
 
-  # Job de déploiement
   deploy:
     name: 🚀 Deploy to VPS
     runs-on: ubuntu-latest
@@ -73,219 +72,38 @@ jobs:
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🧪 Test SSH Connection
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo '✅ SSH connection successful'"
+        run: ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo '✅ SSH connection successful'"
 
-      - name: 📦 Deploy application
+      - name: 📦 Update source code
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-          set -e
-          
-          echo "🚀 [1/8] Préparation du déploiement..."
-          PROJECT_DIR=~/tts-medical-management
-          
-          # Créer le répertoire et cloner/mettre à jour le projet
-          echo "📦 [2/8] Mise à jour du code source..."
-          if [ ! -d "$PROJECT_DIR" ]; then
-            git clone https://github.com/AInelo/tts-medical-management.git $PROJECT_DIR
-          else
-            cd $PROJECT_DIR && git pull origin main
-          fi
-          
-          cd $PROJECT_DIR/api
-          
-          # Backup de l'ancien conteneur (au cas où)
-          echo "💾 [3/8] Sauvegarde de l'ancien conteneur..."
-          if docker ps -a | grep -q ${{ env.CONTAINER_NAME }}; then
-            docker commit ${{ env.CONTAINER_NAME }} ${{ env.IMAGE_NAME }}:backup-$(date +%Y%m%d-%H%M%S) || true
-          fi
-          
-          # Build de la nouvelle image avec cache
-          echo "🐳 [4/8] Construction de l'image Docker..."
-          docker build \
-            --target production \
-            --tag ${{ env.IMAGE_NAME }}:latest \
-            --tag ${{ env.IMAGE_NAME }}:$(date +%Y%m%d-%H%M%S) \
-            .
-          
-          # Test de l'image avant déploiement
-          echo "🧪 [5/8] Test de la nouvelle image..."
-          docker run --rm --name ${{ env.CONTAINER_NAME }}-test \
-            -e NODE_ENV=production \
-            -e PORT=${{ env.PORT }} \
-            ${{ env.IMAGE_NAME }}:latest node -e "console.log('✅ Image test successful')" || {
-            echo "❌ Test de l'image échoué"
-            exit 1
-          }
-          
-          # Arrêt propre de l'ancien conteneur
-          echo "🛑 [6/8] Arrêt de l'ancien conteneur..."
-          if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
-            docker stop ${{ env.CONTAINER_NAME }} || true
-            sleep 2
-          fi
-          docker rm ${{ env.CONTAINER_NAME }} || true
-          
-          # Démarrage du nouveau conteneur
-          echo "🚀 [7/8] Démarrage du nouveau conteneur..."
-          docker run -d \
-            --name ${{ env.CONTAINER_NAME }} \
-            -p ${{ env.PORT }}:${{ env.PORT }} \
-            --restart unless-stopped \
-            --memory="512m" \
-            --cpus="0.5" \
-            -e NODE_ENV=production \
-            -e PORT=${{ env.PORT }} \
-            ${{ env.IMAGE_NAME }}:latest
-          
-          # Vérification que le conteneur fonctionne
-          echo "✅ [8/8] Vérification du déploiement..."
-          sleep 15
-          
-          if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
-            echo "✅ Conteneur démarré avec succès"
-            docker logs --tail=20 ${{ env.CONTAINER_NAME }}
-          else
-            echo "❌ Échec du démarrage du conteneur"
-            docker logs ${{ env.CONTAINER_NAME }} || true
-            exit 1
-          fi
-          
-          # Test de connectivité avec vos routes API
-          echo "🔍 Test de connectivité sur l'API..."
-          sleep 5
-          if curl -f -s --max-time 10 http://localhost:${{ env.PORT }}/api/ > /dev/null 2>&1; then
-            echo "✅ API accessible sur /api/"
-          else
-            echo "⚠️  Test de connectivité - vérification manuelle nécessaire"
-            echo "Status du conteneur: $(docker ps --filter name=${{ env.CONTAINER_NAME }} --format 'table {{.Status}}')"
-          fi
-          
-          echo "🎉 Déploiement terminé avec succès !"
-          EOF
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "cd ~/tts-medical-management 2>/dev/null || git clone https://github.com/AInelo/tts-medical-management.git ~/tts-medical-management; \
+           cd ~/tts-medical-management && git pull origin main"
+
+      - name: 🔧 Make deploy script executable
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "chmod +x ~/tts-medical-management/scripts/deploy.sh"
+
+      - name: 🚀 Execute deployment
+        run: |
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "cd ~/tts-medical-management && ./scripts/deploy.sh ${{ env.IMAGE_NAME }} ${{ env.CONTAINER_NAME }} ${{ env.PORT }}"
 
       - name: 🔧 Configure NGINX
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'NGINX_EOF'
-          PROJECT_DIR=~/tts-medical-management
-          
-          echo "🔧 [1/5] Recherche de la configuration NGINX..."
-          
-          # Vérifier plusieurs emplacements possibles pour la config NGINX
-          NGINX_CONFIG=""
-          if [ -f "$PROJECT_DIR/nginx/tts-medical.conf" ]; then
-            NGINX_CONFIG="$PROJECT_DIR/nginx/tts-medical.conf"
-            echo "✅ Config trouvée dans nginx/tts-medical.conf"
-          elif [ -f "$PROJECT_DIR/api/nginx.conf" ]; then
-            NGINX_CONFIG="$PROJECT_DIR/api/nginx.conf"
-            echo "✅ Config trouvée dans api/nginx.conf"
-          elif [ -f "$PROJECT_DIR/tts-medical.conf" ]; then
-            NGINX_CONFIG="$PROJECT_DIR/tts-medical.conf"
-            echo "✅ Config trouvée dans tts-medical.conf"
-          fi
-          
-          if [ -n "$NGINX_CONFIG" ]; then
-            echo "🔧 [2/5] Configuration NGINX trouvée: $NGINX_CONFIG"
-            
-            # Créer les répertoires nginx s'ils n'existent pas
-            sudo mkdir -p /etc/nginx/sites-available
-            sudo mkdir -p /etc/nginx/sites-enabled
-            
-            echo "🔧 [3/5] Copie de la configuration..."
-            # Copier la configuration
-            sudo cp "$NGINX_CONFIG" /etc/nginx/sites-available/tts-medical.conf
-            
-            # Créer le lien symbolique
-            sudo ln -sf /etc/nginx/sites-available/tts-medical.conf /etc/nginx/sites-enabled/tts-medical.conf
-            
-            # Supprimer la config par défaut si elle existe
-            sudo rm -f /etc/nginx/sites-enabled/default
-            
-            echo "🧪 [4/5] Test de la configuration NGINX..."
-            # Test de la configuration NGINX
-            if sudo nginx -t; then
-              echo "✅ Configuration NGINX valide"
-              sudo systemctl reload nginx
-              echo "✅ NGINX rechargé avec succès"
-              
-              # Vérifier le status de NGINX
-              if sudo systemctl is-active nginx > /dev/null; then
-                echo "✅ [5/5] NGINX est actif et fonctionne"
-              else
-                echo "❌ Problème avec NGINX"
-                sudo systemctl status nginx --no-pager -l
-              fi
-            else
-              echo "❌ Erreur dans la configuration NGINX"
-              sudo nginx -t
-              echo "⚠️  Continuité du déploiement sans rechargement NGINX"
-            fi
-          else
-            echo "⚠️  [2/5] Aucun fichier de configuration NGINX trouvé"
-            echo "📂 Contenu du répertoire projet:"
-            ls -la $PROJECT_DIR/ 2>/dev/null || echo "Répertoire projet non trouvé"
-            if [ -d "$PROJECT_DIR/nginx" ]; then
-              echo "📂 Contenu du répertoire nginx:"
-              ls -la $PROJECT_DIR/nginx/
-            fi
-            echo "⚠️  Veuillez créer le fichier nginx/tts-medical.conf dans votre repository"
-          fi
-          NGINX_EOF
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "cd ~/tts-medical-management && ./scripts/setup-nginx.sh"
 
       - name: 🧹 Cleanup old images
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'CLEANUP_EOF'
-          echo "🧹 Nettoyage des anciennes images..."
-          # Garder seulement les 3 dernières images
-          docker images ${{ env.IMAGE_NAME }} --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "./tts-medical-management/scripts/cleanup.sh ${{ env.IMAGE_NAME }}"
 
-      - name: 📊 Deployment Summary
+      - name: 📊 Show deployment status
         run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'SUMMARY_EOF'
-          echo "📊 RÉSUMÉ DU DÉPLOIEMENT"
-          echo "======================="
-          echo "🐳 Conteneur: $(docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep ${{ env.CONTAINER_NAME }})"
-          echo "💾 Utilisation mémoire: $(docker stats --no-stream --format '{{.MemUsage}}' ${{ env.CONTAINER_NAME }})"
-          echo "📈 CPU: $(docker stats --no-stream --format '{{.CPUPerc}}' ${{ env.CONTAINER_NAME }})"
-          echo "🏷️  Image: $(docker images ${{ env.IMAGE_NAME }}:latest --format '{{.Size}}')"
-          echo "⏰ Temps de démarrage: $(docker inspect ${{ env.CONTAINER_NAME }} --format='{{.State.StartedAt}}')"
-          echo ""
-          echo "🌐 URLs à tester:"
-          echo "   - API: http://collection.urmaphalab.com/api/"
-          echo "   - HTTPS: https://collection.urmaphalab.com/api/"
-          SUMMARY_EOF
-
-      - name: 🔔 Notify deployment status
-        if: always()
-        run: |
-          if [ $? -eq 0 ]; then
-            echo "✅ Déploiement réussi sur ${{ secrets.VPS_HOST }}"
-            echo "🚀 Application accessible sur le port ${{ env.PORT }}"
-          else
-            echo "❌ Échec du déploiement"
-            exit 1
-          fi | sort -r | tail -n +4 | xargs -r -I {} docker rmi ${{ env.IMAGE_NAME }}:{} || true
-          
-          # Nettoyage général mais conservateur
-          docker system prune -f
-          echo "✅ Nettoyage terminé"
-          CLEANUP_EOF
-
-      - name: 📊 Deployment Summary
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-          echo "📊 RÉSUMÉ DU DÉPLOIEMENT"
-          echo "======================="
-          echo "🐳 Conteneur: $(docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep ${{ env.CONTAINER_NAME }})"
-          echo "💾 Utilisation mémoire: $(docker stats --no-stream --format '{{.MemUsage}}' ${{ env.CONTAINER_NAME }})"
-          echo "📈 CPU: $(docker stats --no-stream --format '{{.CPUPerc}}' ${{ env.CONTAINER_NAME }})"
-          echo "🏷️  Image: $(docker images ${{ env.IMAGE_NAME }}:latest --format '{{.Size}}')"
-          echo "⏰ Temps de démarrage: $(docker inspect ${{ env.CONTAINER_NAME }} --format='{{.State.StartedAt}}')"
-          echo ""
-          echo "🌐 URLs à tester:"
-          echo "   - API: http://collection.urmaphalab.com/api/"
-          echo "   - HTTPS: https://collection.urmaphalab.com/api/"
-          EOF
+          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "./tts-medical-management/scripts/status.sh ${{ env.CONTAINER_NAME }}"
 
       - name: 🔔 Notify deployment status
         if: always()
@@ -297,274 +115,3 @@ jobs:
             echo "❌ Échec du déploiement"
             exit 1
           fi
-
-
-
-
-
-
-# name: Deploy TTS Medical API to VPS
-
-# on:
-#   push:
-#     branches: [main]
-#     paths:
-#       - 'api/**'
-#       - '.github/workflows/**'
-#       - 'nginx/**'  # Ajouté pour surveiller les changements de config NGINX
-#   pull_request:
-#     branches: [main]
-#     paths:
-#       - 'api/**'
-
-# env:
-#   IMAGE_NAME: tts-medical-api
-#   CONTAINER_NAME: tts-medical-backend
-#   PORT: 5100  # CORRIGÉ: Port correct selon votre app Node.js
-
-# jobs:
-#   # Job de test avant déploiement
-#   test:
-#     name: 🧪 Run Tests
-#     runs-on: ubuntu-latest
-#     if: github.event_name == 'pull_request'
-    
-#     steps:
-#       - name: 📂 Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: 🔧 Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: '18'
-#           cache: 'npm'
-#           cache-dependency-path: 'api/package-lock.json'
-
-#       - name: 📦 Install dependencies
-#         working-directory: ./api
-#         run: npm ci
-
-#       - name: 🏗️ Build TypeScript
-#         working-directory: ./api
-#         run: npm run build
-
-#       - name: 🧪 Run tests
-#         working-directory: ./api
-#         run: npm test
-
-#       - name: 🐳 Test Docker build
-#         working-directory: ./api
-#         run: |
-#           docker build --target production -t ${{ env.IMAGE_NAME }}:test .
-#           docker run --rm -d --name test-container -p 5100:5100 ${{ env.IMAGE_NAME }}:test
-#           sleep 5
-#           docker stop test-container || true
-
-#   # Job de déploiement
-#   deploy:
-#     name: 🚀 Deploy to VPS
-#     runs-on: ubuntu-latest
-#     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-#     steps:
-#       - name: 📂 Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: 🔐 Setup SSH key
-#         run: |
-#           mkdir -p ~/.ssh
-#           echo "${{ secrets.VPS_URMAPHA_PRIVATE_SSH }}" > ~/.ssh/id_rsa
-#           chmod 600 ~/.ssh/id_rsa
-#           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-
-#       - name: 🧪 Test SSH Connection
-#         run: |
-#           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo '✅ SSH connection successful'"
-
-#       - name: 📦 Deploy application
-#         run: |
-#           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-#           set -e
-          
-#           echo "🚀 [1/8] Préparation du déploiement..."
-#           PROJECT_DIR=~/tts-medical-management
-          
-#           # Créer le répertoire et cloner/mettre à jour le projet
-#           echo "📦 [2/8] Mise à jour du code source..."
-#           if [ ! -d "$PROJECT_DIR" ]; then
-#             git clone https://github.com/AInelo/tts-medical-management.git $PROJECT_DIR
-#           else
-#             cd $PROJECT_DIR && git pull origin main
-#           fi
-          
-#           cd $PROJECT_DIR/api
-          
-#           # Backup de l'ancien conteneur (au cas où)
-#           echo "💾 [3/8] Sauvegarde de l'ancien conteneur..."
-#           if docker ps -a | grep -q ${{ env.CONTAINER_NAME }}; then
-#             docker commit ${{ env.CONTAINER_NAME }} ${{ env.IMAGE_NAME }}:backup-$(date +%Y%m%d-%H%M%S) || true
-#           fi
-          
-#           # Build de la nouvelle image avec cache
-#           echo "🐳 [4/8] Construction de l'image Docker..."
-#           docker build \
-#             --target production \
-#             --tag ${{ env.IMAGE_NAME }}:latest \
-#             --tag ${{ env.IMAGE_NAME }}:$(date +%Y%m%d-%H%M%S) \
-#             .
-          
-#           # Test de l'image avant déploiement
-#           echo "🧪 [5/8] Test de la nouvelle image..."
-#           docker run --rm --name ${{ env.CONTAINER_NAME }}-test \
-#             -e NODE_ENV=production \
-#             -e PORT=${{ env.PORT }} \
-#             ${{ env.IMAGE_NAME }}:latest node -e "console.log('✅ Image test successful')" || {
-#             echo "❌ Test de l'image échoué"
-#             exit 1
-#           }
-          
-#           # Arrêt propre de l'ancien conteneur
-#           echo "🛑 [6/8] Arrêt de l'ancien conteneur..."
-#           if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
-#             docker stop ${{ env.CONTAINER_NAME }} || true
-#             sleep 2
-#           fi
-#           docker rm ${{ env.CONTAINER_NAME }} || true
-          
-#           # Démarrage du nouveau conteneur
-#           echo "🚀 [7/8] Démarrage du nouveau conteneur..."
-#           docker run -d \
-#             --name ${{ env.CONTAINER_NAME }} \
-#             -p ${{ env.PORT }}:${{ env.PORT }} \
-#             --restart unless-stopped \
-#             --memory="512m" \
-#             --cpus="0.5" \
-#             -e NODE_ENV=production \
-#             -e PORT=${{ env.PORT }} \
-#             ${{ env.IMAGE_NAME }}:latest
-          
-#           # Vérification que le conteneur fonctionne
-#           echo "✅ [8/8] Vérification du déploiement..."
-#           sleep 15
-          
-#           if docker ps | grep -q ${{ env.CONTAINER_NAME }}; then
-#             echo "✅ Conteneur démarré avec succès"
-#             docker logs --tail=20 ${{ env.CONTAINER_NAME }}
-#           else
-#             echo "❌ Échec du démarrage du conteneur"
-#             docker logs ${{ env.CONTAINER_NAME }} || true
-#             exit 1
-#           fi
-          
-#           # Test de connectivité avec vos routes API
-#           echo "🔍 Test de connectivité sur l'API..."
-#           sleep 5
-#           if curl -f -s --max-time 10 http://localhost:${{ env.PORT }}/api/ > /dev/null 2>&1; then
-#             echo "✅ API accessible sur /api/"
-#           else
-#             echo "⚠️  Test de connectivité - vérification manuelle nécessaire"
-#             echo "Status du conteneur: $(docker ps --filter name=${{ env.CONTAINER_NAME }} --format 'table {{.Status}}')"
-#           fi
-          
-#           echo "🎉 Déploiement terminé avec succès !"
-#           EOF
-
-#       - name: 🔧 Configure NGINX
-#         run: |
-#           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-#           PROJECT_DIR=~/tts-medical-management
-          
-#           # Vérifier plusieurs emplacements possibles pour la config NGINX
-#           NGINX_CONFIG=""
-#           if [ -f "$PROJECT_DIR/nginx/tts-medical.conf" ]; then
-#             NGINX_CONFIG="$PROJECT_DIR/nginx/tts-medical.conf"
-#           elif [ -f "$PROJECT_DIR/api/nginx.conf" ]; then
-#             NGINX_CONFIG="$PROJECT_DIR/api/nginx.conf"
-#           elif [ -f "$PROJECT_DIR/tts-medical.conf" ]; then
-#             NGINX_CONFIG="$PROJECT_DIR/tts-medical.conf"
-#           fi
-          
-#           if [ -n "$NGINX_CONFIG" ]; then
-#             echo "🔧 Configuration NGINX trouvée: $NGINX_CONFIG"
-            
-#             # Créer le répertoire nginx s'il n'existe pas
-#             sudo mkdir -p /etc/nginx/sites-available
-#             sudo mkdir -p /etc/nginx/sites-enabled
-            
-#             # Copier la configuration
-#             sudo cp "$NGINX_CONFIG" /etc/nginx/sites-available/tts-medical.conf
-            
-#             # Créer le lien symbolique
-#             sudo ln -sf /etc/nginx/sites-available/tts-medical.conf /etc/nginx/sites-enabled/tts-medical.conf
-            
-#             # Supprimer la config par défaut si elle existe
-#             sudo rm -f /etc/nginx/sites-enabled/default
-            
-#             # Test de la configuration NGINX
-#             echo "🧪 Test de la configuration NGINX..."
-#             if sudo nginx -t; then
-#               echo "✅ Configuration NGINX valide"
-#               sudo systemctl reload nginx
-#               echo "✅ NGINX rechargé avec succès"
-              
-#               # Vérifier le status de NGINX
-#               if sudo systemctl is-active nginx > /dev/null; then
-#                 echo "✅ NGINX est actif et fonctionne"
-#               else
-#                 echo "❌ Problème avec NGINX"
-#                 sudo systemctl status nginx
-#               fi
-#             else
-#               echo "❌ Erreur dans la configuration NGINX"
-#               sudo nginx -t 2>&1
-#               echo "⚠️  Continuité du déploiement sans rechargement NGINX"
-#             fi
-#           else
-#             echo "⚠️  Aucun fichier de configuration NGINX trouvé"
-#             echo "📂 Contenu du répertoire projet:"
-#             ls -la $PROJECT_DIR/
-#             if [ -d "$PROJECT_DIR/nginx" ]; then
-#               echo "📂 Contenu du répertoire nginx:"
-#               ls -la $PROJECT_DIR/nginx/
-#             fi
-#           fi
-#           EOF
-
-#       - name: 🧹 Cleanup old images
-#         run: |
-#           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-#           echo "🧹 Nettoyage des anciennes images..."
-#           # Garder seulement les 3 dernières images
-#           docker images ${{ env.IMAGE_NAME }} --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}$' | sort -r | tail -n +4 | xargs -r -I {} docker rmi ${{ env.IMAGE_NAME }}:{} || true
-          
-#           # Nettoyage général mais conservateur
-#           docker system prune -f
-#           echo "✅ Nettoyage terminé"
-#           EOF
-
-#       - name: 📊 Deployment Summary
-#         run: |
-#           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-#           echo "📊 RÉSUMÉ DU DÉPLOIEMENT"
-#           echo "======================="
-#           echo "🐳 Conteneur: $(docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep ${{ env.CONTAINER_NAME }})"
-#           echo "💾 Utilisation mémoire: $(docker stats --no-stream --format '{{.MemUsage}}' ${{ env.CONTAINER_NAME }})"
-#           echo "📈 CPU: $(docker stats --no-stream --format '{{.CPUPerc}}' ${{ env.CONTAINER_NAME }})"
-#           echo "🏷️  Image: $(docker images ${{ env.IMAGE_NAME }}:latest --format '{{.Size}}')"
-#           echo "⏰ Temps de démarrage: $(docker inspect ${{ env.CONTAINER_NAME }} --format='{{.State.StartedAt}}')"
-#           echo ""
-#           echo "🌐 URLs à tester:"
-#           echo "   - API: http://collection.urmaphalab.com/api/"
-#           echo "   - HTTPS: https://collection.urmaphalab.com/api/"
-#           EOF
-
-#       - name: 🔔 Notify deployment status
-#         if: always()
-#         run: |
-#           if [ $? -eq 0 ]; then
-#             echo "✅ Déploiement réussi sur ${{ secrets.VPS_HOST }}"
-#             echo "🚀 Application accessible sur le port ${{ env.PORT }}"
-#           else
-#             echo "❌ Échec du déploiement"
-#             exit 1
-#           fi
