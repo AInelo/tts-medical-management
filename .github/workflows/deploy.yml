@@ -23,8 +23,8 @@ jobs:
           ssh -i key.pem \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            set -e
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+            'set -e
             echo "[1/6] 📦 Cloner le projet ou mettre à jour..."
             mkdir -p ~/collection_audios && cd ~/collection_audios
             if [ ! -d ".git" ]; then
@@ -33,7 +33,7 @@ jobs:
               git pull
             fi
 
-            echo "[2/6] 🐳 Construire l'image Docker..."
+            echo "[2/6] 🐳 Construire l\'image Docker..."
             cd api
             docker build -t collection_audios_backend .
 
@@ -58,5 +58,4 @@ jobs:
             sudo apt install -y certbot python3-certbot-nginx
             sudo certbot --nginx --non-interactive --agree-tos --email your@email.com -d collection.urmaphalab.com
 
-            echo "✅ Déploiement terminé avec succès !"
-          EOF
+            echo "✅ Déploiement terminé avec succès !"'
