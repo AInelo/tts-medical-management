@@ -1,0 +1,29 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Développement
+  api-dev:
+    build:
+      context: .
+      target: development
+    container_name: tts-api-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+
+  # Production (pour test local)
+  api-prod:
+    build:
+      context: .
+      target: production
+    container_name: tts-api-prod
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

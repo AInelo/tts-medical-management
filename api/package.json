@@ -1,15 +1,26 @@
 {
-  "name": "sublime-world_backend",
+  "name": "tts-medical-management-api",
   "version": "1.0.0",
   "description": "",
   "main": "server.ts",
   "scripts": {
     "start": "npm run build && node dist/index.js",
     "dev": "nodemon --watch src --exec ts-node src/server.ts",
+    "dev:node22": "nodemon --watch src --exec 'node --loader ts-node/esm src/server.ts'",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:node22": "node --test src/**/*.test.ts",
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "postbuild": "node addJsExtension.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "docker:build": "docker build -t tts-api:latest .",
+    "docker:dev": "docker-compose up -d api-dev",
+    "docker:prod": "docker-compose up -d api-prod",
+    "docker:test": "chmod +x test-docker.sh && ./test-docker.sh",
+    "performance": "node --prof dist/index.js",
+    "perf-report": "node --prof-process isolate-*.log > performance-report.txt"
   },
   "keywords": [],
   "author": "",

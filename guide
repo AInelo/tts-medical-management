@@ -1,0 +1,348 @@
+# 🚀 Guide d'installation et d'utilisation - TTS Medical API
+
+## 📁 1. Organisation des fichiers
+
+Voici comment organiser les fichiers dans votre projet :
+
+```
+tts-medical-management-api/
+├── src/                    # Votre code TypeScript existant
+├── dist/                   # Généré après build
+├── package.json           # Votre fichier existant
+├── Dockerfile             # ← À créer (voir artéfact "Dockerfile optimisé")
+├── docker-compose.yml     # ← À créer (voir artéfact "Docker Compose")
+├── .dockerignore          # ← À créer (voir artéfact ".dockerignore")
+├── test-docker.sh         # ← À créer (voir artéfact "Scripts de test")
+├── Makefile              # ← À créer (voir artéfact "Makefile") 
+└── README-Docker.md      # ← Documentation (optionnel)
+```
+
+## 🔧 2. Installation étape par étape
+
+### Étape 1 : Créer les fichiers Docker
+
+```bash
+# Dans le dossier racine de votre projet
+cd tts-medical-management-api
+
+# Créer le Dockerfile
+# Copiez le contenu de l'artéfact "Dockerfile optimisé pour Node.js 22"
+nano Dockerfile
+
+# Créer le docker-compose.yml
+# Copiez le contenu de l'artéfact "Docker Compose simplifié"
+nano docker-compose.yml
+
+# Créer le .dockerignore
+# Copiez le contenu de l'artéfact ".dockerignore optimisé"
+nano .dockerignore
+```
+
+### Étape 2 : Créer les scripts de test
+
+```bash
+# Créer le script de test
+# Copiez le contenu de l'artéfact "Scripts de test"
+nano test-docker.sh
+
+# Rendre le script exécutable
+chmod +x test-docker.sh
+```
+
+### Étape 3 : Créer le Makefile (optionnel mais recommandé)
+
+```bash
+# Créer le Makefile
+# Copiez le contenu de l'artéfact "Makefile"
+nano Makefile
+```
+
+### Étape 4 : Mettre à jour votre package.json
+
+```bash
+# Ajoutez ces scripts à votre package.json existant
+# Voir l'artéfact "Scripts package.json optimisés"
+```
+
+## 🏃‍♂️ 3. Utilisation rapide
+
+### Option A : Avec le Makefile (RECOMMANDÉ)
+
+```bash
+# Voir toutes les commandes disponibles
+make help
+
+# Test complet (recommandé en premier)
+make test
+
+# Développement
+make dev          # API sur http://localhost:3000
+
+# Production (test local)
+make prod         # API sur http://localhost:3001
+
+# Les deux en même temps
+make both
+
+# Voir les logs
+make logs
+
+# Arrêter tout
+make stop
+
+# Nettoyer complètement
+make clean
+```
+
+### Option B : Avec Docker Compose directement
+
+```bash
+# Build et démarrage développement
+docker-compose up -d api-dev
+# → API disponible sur http://localhost:3000
+
+# Build et démarrage production
+docker-compose up -d api-prod  
+# → API disponible sur http://localhost:3001
+
+# Voir les logs
+docker-compose logs -f api-dev
+docker-compose logs -f api-prod
+
+# Arrêter
+docker-compose down
+```
+
+### Option C : Avec le script de test
+
+```bash
+# Test complet automatique
+./test-docker.sh
+```
+
+## 🔍 4. Processus de test recommandé
+
+### Premier test (obligatoire)
+```bash
+# 1. Test complet pour vérifier que tout fonctionne
+make test
+# ou
+./test-docker.sh
+```
+
+### Tests de développement
+```bash
+# 2. Lancer l'environnement de développement
+make dev
+
+# 3. Vérifier que votre API répond
+curl http://localhost:3000/
+# ou ouvrir dans le navigateur
+
+# 4. Voir les logs en temps réel
+make logs-dev
+```
+
+### Tests de production
+```bash
+# 5. Lancer l'environnement de production
+make prod
+
+# 6. Vérifier la production
+curl http://localhost:3001/
+
+# 7. Comparer les performances
+make status
+```
+
+## 🛠️ 5. Commandes de debugging
+
+```bash
+# Entrer dans le conteneur de développement
+make shell-dev
+# ou
+docker-compose exec api-dev sh
+
+# Entrer dans le conteneur de production
+make shell-prod
+
+# Inspecter les images
+make inspect-dev
+make inspect-prod
+
+# Voir la taille des images
+make size
+
+# Test rapide de démarrage
+make quick-test
+```
+
+## 📊 6. Monitoring et logs
+
+```bash
+# Statut des conteneurs
+make status
+
+# Logs en temps réel
+make logs           # Tous les logs
+make logs-dev       # Développement uniquement
+make logs-prod      # Production uniquement
+
+# Stats des ressources
+docker stats
+```
+
+## 🚨 7. Dépannage
+
+### Problème : "Permission denied"
+```bash
+chmod +x test-docker.sh
+chmod +x Makefile
+```
+
+### Problème : "Port already in use"
+```bash
+# Voir qui utilise le port
+lsof -i :3000
+lsof -i :3001
+
+# Ou changer les ports dans docker-compose.yml
+```
+
+### Problème : "Build failed"
+```bash
+# Nettoyer complètement
+make clean
+docker system prune -a
+
+# Rebuild
+make build
+```
+
+### Problème : "API ne répond pas"
+```bash
+# Voir les logs pour débugger
+make logs-dev
+
+# Vérifier que votre API a bien une route
+# Ajouter dans votre server.ts :
+app.get('/health', (req, res) => res.json({ status: 'OK' }));
+```
+
+## 📝 8. Workflow recommandé
+
+### Pour le développement quotidien :
+```bash
+make dev        # Démarrer
+make logs-dev   # Surveiller
+# ... développer ...
+make stop       # Arrêter
+```
+
+### Avant de pousser en production :
+```bash
+make test       # Test complet
+make prod       # Test production local
+make deploy-check  # Vérifications finales
+```
+
+### Pour nettoyer :
+```bash
+make clean      # Nettoyage complet
+```
+
+## 🎯 9. Points importants
+
+1. **Premier lancement** : Toujours faire `make test` en premier
+2. **Route santé** : Ajoutez `app.get('/health', ...)` dans votre API
+3. **Logs** : Surveillez toujours les logs avec `make logs`
+4. **Ports** : Dev sur 3000, Prod sur 3001
+5. **Nettoyage** : `make clean` en cas de problème
+
+## 🔗 10. Liens utiles
+
+- Développement : http://localhost:3000
+- Production : http://localhost:3001  
+- Portainer (monitoring) : http://localhost:9000
+- Logs : `make logs`
+- Aide : `make help`
+
+
+
+Comment utiliser ces fichiers :
+1. Développement
+bash# Lancer en mode développement (avec hot reload)
+docker-compose up api-dev
+
+# Votre API sera disponible sur http://localhost:3000
+2. Test de production
+bash# Lancer en mode production
+docker-compose up api-prod
+
+# Votre API sera disponible sur http://localhost:3001
+3. Commandes utiles
+bash# Build et lancer les deux environnements
+docker-compose up -d
+
+# Voir les logs
+docker-compose logs -f api-dev
+docker-compose logs -f api-prod
+
+# Arrêter tout
+docker-compose down
+
+# Nettoyer complètement
+docker-compose down -v
+docker system prune -f
+4. Test rapide
+bash# Build l'image de production
+docker build --target production -t tts-api:prod .
+
+# Tester l'image
+docker run -p 8080:3000 tts-api:prod
+Structure des fichiers :
+
+Dockerfile : 3 stages (base, development, production)
+docker-compose.yml : 2 services (dev sur port 3000, prod sur port 3001)
+.dockerignore : Exclut les fichiers inutiles du build
+
+Ces fichiers sont maintenant simples, clairs et prêts à utiliser avec votre projet TypeScript !
+
+
+
+
+Utilisation rapide :
+bash# Voir toutes les commandes
+make help
+
+# Développement
+make dev          # http://localhost:3000
+
+# Production  
+make prod         # http://localhost:3001
+
+# Les deux
+make both
+
+# Test rapide
+make test
+
+# Logs
+make logs
+
+# Nettoyage
+make clean
+Test de base :
+bash# 1. Créer les fichiers dans votre projet
+# 2. Tester le build
+make build
+
+# 3. Lancer en dev
+make dev
+
+# 4. Vérifier que ça fonctionne
+curl http://localhost:3000
+
+# 5. Tester la prod
+make prod
+curl http://localhost:3001
