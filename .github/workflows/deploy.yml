@@ -16,9 +16,10 @@ jobs:
       - name: 🔐 Setup SSH to VPS
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY_BASE64 }}" | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
 
       - name: 🚀 Deploy and run app on VPS
         run: |
