@@ -25,6 +25,7 @@ const corsOptions = {
       'https://localhost:3000',
       'https://localhost:5173',
       'https://localhost:5174',
+      'https://frontend-turibios-projects.vercel.app/',
       // Ajoutez ici vos domaines de production
       'https://collection.urmaphalab.com',
       'http://collection.urmaphalab.com'
