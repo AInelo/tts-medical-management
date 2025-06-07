@@ -77,8 +77,16 @@ jobs:
       - name: 📦 Update source code and set permissions
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-          "cd ~/tts-medical-management 2>/dev/null || git clone https://github.com/AInelo/tts-medical-management.git ~/tts-medical-management; \
-           cd ~/tts-medical-management && git pull origin main && chmod +x scripts/*.sh"
+          "if [ -d ~/tts-medical-management ]; then
+            cd ~/tts-medical-management && git pull origin main || {
+              echo 'Pull failed, re-cloning repository...';
+              cd ~ && rm -rf ~/tts-medical-management;
+              git clone git@github.com:AInelo/tts-medical-management.git ~/tts-medical-management;
+            };
+          else
+            git clone git@github.com:AInelo/tts-medical-management.git ~/tts-medical-management;
+          fi;
+          cd ~/tts-medical-management && chmod +x scripts/*.sh"
 
       - name: 🚀 Execute deployment
         run: |
