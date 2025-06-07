@@ -53,5 +53,5 @@ ENV PORT=5100
 # Utiliser dumb-init pour gérer les signaux
 ENTRYPOINT ["dumb-init", "--"]
 
-# Commande par défaut
-CMD ["node", "dist/index.js"]
+# Commande par défaut - CORRIGÉE
+CMD ["node", "dist/server.js"]
