@@ -74,17 +74,11 @@ jobs:
       - name: 🧪 Test SSH Connection
         run: ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo '✅ SSH connection successful'"
 
-      - name: 📦 Update source code
+      - name: 📦 Update source code and set permissions
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
           "cd ~/tts-medical-management 2>/dev/null || git clone https://github.com/AInelo/tts-medical-management.git ~/tts-medical-management; \
-           cd ~/tts-medical-management && git pull origin main"
-           chmod +x scripts/*.sh
-
-      - name: 🔧 Make deploy script executable
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-          "chmod +x ~/tts-medical-management/scripts/deploy.sh"
+           cd ~/tts-medical-management && git pull origin main && chmod +x scripts/*.sh"
 
       - name: 🚀 Execute deployment
         run: |
@@ -94,17 +88,17 @@ jobs:
       - name: 🔧 Configure NGINX
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-          "cd ~/tts-medical-management && ./scripts/setup-nginx.sh"
+          "cd ~/tts-medical-management && ls -l ./scripts/setup-nginx.sh && ./scripts/setup-nginx.sh"
 
       - name: 🧹 Cleanup old images
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-          "./tts-medical-management/scripts/cleanup.sh ${{ env.IMAGE_NAME }}"
+          "~/tts-medical-management/scripts/cleanup.sh ${{ env.IMAGE_NAME }}"
 
       - name: 📊 Show deployment status
         run: |
           ssh -i ~/.ssh/id_rsa ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-          "./tts-medical-management/scripts/status.sh ${{ env.CONTAINER_NAME }}"
+          "~/tts-medical-management/scripts/status.sh ${{ env.CONTAINER_NAME }}"
 
       - name: 🔔 Notify deployment status
         if: always()

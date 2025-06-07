@@ -49,7 +49,7 @@ if [ -n "$NGINX_CONFIG" ]; then
     # Supprimer la configuration par défaut si elle existe
     if [ -f "/etc/nginx/sites-enabled/default" ]; then
         sudo rm -f /etc/nginx/sites-enabled/default
-        log "✅ Configuration par défaut supprimée"
+        log "✅ Configuration par défaut supprimée" 
     fi
     
     # Test de la configuration NGINX
