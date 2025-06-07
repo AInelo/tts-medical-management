@@ -6,19 +6,58 @@ import cors from 'cors';
 const app = express();
 
 // Autorise la détection du proxy
-app.set('trust proxy', true); // 1 = 1er niveau de proxy, souvent suffisant sur un mutualisé
+app.set('trust proxy', true);
 
 // Utilisation du port provenant de l'environnement sinon 5100 par défaut
 const PORT = process.env.PORT || 5100;
 
-// CORS avec toutes les origines autorisées (pour dev uniquement, à adapter en prod)
-app.use(cors({
-  origin: "*",
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type']
-}));
+// Configuration CORS appropriée
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Autoriser les requêtes sans origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Liste des origines autorisées
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'https://localhost:3000',
+      'https://localhost:5173',
+      'https://localhost:5174',
+      // Ajoutez ici vos domaines de production
+      'https://collection.urmaphalab.com',
+      'http://collection.urmaphalab.com'
+    ];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // En développement, on peut être plus permissif
+      if (process.env.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  credentials: true, // Si vous avez besoin de cookies/auth
+  optionsSuccessStatus: 200 // Pour supporter les anciens navigateurs
+};
 
-app.use(express.json());
+app.use(cors(corsOptions));
+
+// Middleware pour parser le JSON
+app.use(express.json({ limit: '10mb' })); // Augmenté pour les fichiers audio
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes de test et de santé
 app.get('/', (req, res) => {
@@ -51,7 +90,8 @@ app.get('/api/test', (req, res) => {
       'GET /api/audio/* (your audio routes)',
       'GET /api/etablissement/* (your etablissement routes)'
     ],
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cors: 'Configured properly'
   });
 });
 
